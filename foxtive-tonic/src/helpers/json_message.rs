@@ -1,0 +1,69 @@
+use crate::grpc::responder::GrpcResponse;
+use foxtive::helpers::time::current_timestamp;
+use serde::Serialize;
+
+/// Factory for creating standardized JSON response envelopes.
+///
+/// Wraps data with `code`, `success`, `timestamp`, and optional `message`
+/// fields using the [`GrpcResponse`] type.
+pub struct JsonMessage;
+
+impl JsonMessage {
+    /// Build a complete JSON response envelope.
+    pub fn make<T: Serialize>(
+        data: T,
+        code: &str,
+        success: bool,
+        message: Option<String>,
+    ) -> GrpcResponse<T> {
+        GrpcResponse {
+            data,
+            success,
+            message,
+            code: code.to_string(),
+            timestamp: current_timestamp(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::ResponseCodeContract;
+    use crate::enums::response_code::ResponseCode;
+    use serde_json::json;
+
+    #[test]
+    fn test_ok() {
+        let data = json!({"key": "value"});
+        let message = Some("Operation successful".to_string());
+
+        let response =
+            JsonMessage::make(data.clone(), ResponseCode::Ok.code(), true, message.clone());
+
+        assert!(response.success);
+        assert_eq!(response.code, ResponseCode::Ok.code());
+        assert!(response.timestamp > 0);
+        assert_eq!(response.data, data);
+        assert_eq!(response.message, message);
+    }
+
+    #[test]
+    fn test_failure() {
+        let data = json!({"error": "something went wrong"});
+        let message = Some("Operation failed".to_string());
+
+        let response = JsonMessage::make(
+            data.clone(),
+            ResponseCode::Internal.code(),
+            false,
+            message.clone(),
+        );
+
+        assert!(!response.success);
+        assert_eq!(response.code, ResponseCode::Internal.code());
+        assert!(response.timestamp > 0);
+        assert_eq!(response.data, data);
+        assert_eq!(response.message, message);
+    }
+}

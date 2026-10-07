@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Never cache a partially-broken feature resolution into these steps.
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  checks:
+    name: Lints, tests and docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # The workspace covers foxtive-tonic-examples, whose build.rs runs prost-build.
+      # The published library needs no protoc -- the `protoc-free` job pins that down --
+      # but lints and tests over the whole workspace do, so install it rather than
+      # betting on what the runner image happens to preinstall.
+      - name: Install protoc for the examples build script
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      # `-D warnings` also fails the build on cargo's own lints, which is how the
+      # unused-dependency warning that `--all-features` used to hide gets caught here.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --all-features
+
+      # The crate ships `#![warn(missing_docs)]`, so a broken intra-doc link or a
+      # public item without a comment fails here rather than in a release build.
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps -p foxtive-tonic --all-features
+
+  # The declared floor has to be buildable, or `rust-version` is a claim nothing backs.
+  # The version is read out of the manifest instead of written here a second time, so the
+  # two cannot drift into disagreeing with each other.
+  #
+  # Only the library is checked: it is what gets published, and it needs no protoc, so this
+  # job does not depend on what happens to be preinstalled on the runner image.
+  msrv:
+    name: Minimum supported Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version the manifest declares
+        id: msrv
+        run: |
+          version=$(sed -n 's/^rust-version = "\([^"]*\)"$/\1/p' foxtive-tonic/Cargo.toml)
+          if [ -z "$version" ]; then
+            echo "foxtive-tonic/Cargo.toml declares no rust-version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Check the library and its tests on that toolchain
+        run: cargo check -p foxtive-tonic --all-features --all-targets
+
+  # The library must build on a machine that has no protoc: it ships no build script,
+  # and consumers who install it should never need the compiler.
+  #
+  # Two things make this non-vacuous. The target dir is dedicated, so no cached
+  # build-script output can stand in for a real one. And the examples member is checked
+  # in the same step with the same environment: it owns the build script that calls
+  # prost-build, so if protoc were somehow reachable, that check would pass and this job
+  # would fail. Positive and negative control in one run.
+  protoc-free:
+    name: Library needs no protoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check the library where protoc cannot be found
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-protoc-free
+          PROTOC: /nonexistent/protoc
+        run: cargo check -p foxtive-tonic --all-features
+
+      - name: Confirm that same environment really has no protoc
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-protoc-free
+          PROTOC: /nonexistent/protoc
+        run: |
+          if cargo check -p foxtive-tonic-examples 2> examples.log; then
+            echo "examples built without protoc, so this check proved nothing"
+            exit 1
+          fi
+          grep -qi protoc examples.log || {
+            echo "examples failed, but not because protoc was missing:"
+            cat examples.log
+            exit 1
+          }
+
+  package:
+    name: Packaging contents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: List what would be published
+        run: cargo package --list --allow-dirty -p foxtive-tonic | tee package.txt
+
+      # No build script, and none of the examples' protos. `proto/foxtive/tonic/v1/envelope.proto`
+      # is in the manifest's `include` on purpose: it is the documentation-only contract the
+      # hand-written `Envelope` is checked against, and nothing compiles it here.
+      - name: Assert no build script and no compiled protos
+        run: |
+          if grep -q 'build\.rs' package.txt; then
+            echo "a build.rs would be published, so consumers would need protoc"
+            exit 1
+          fi
+          if grep -q 'helloworld\.proto' package.txt; then
+            echo "an example proto would be published"
+            exit 1
+          fi
+          if ! grep -q 'envelope\.proto' package.txt; then
+            echo "the envelope contract is missing from the package"
+            exit 1
+          fi
+
+      - name: Publish dry run
+        run: cargo publish --dry-run --allow-dirty -p foxtive-tonic

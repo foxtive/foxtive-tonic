@@ -1,0 +1,40 @@
+[package]
+name = "foxtive-tonic"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT"
+description = "Micro-Framework Based on Tonic for the Foxtive Ecosystem"
+repository = "https://github.com/foxtive/foxtive-tonic"
+keywords = ["grpc", "tonic", "framework", "rpc"]
+categories = ["web-programming::http-server", "asynchronous"]
+authors = ["ahmard"]
+include = [
+    "src/**/*",
+    "proto/**/*",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+]
+
+[features]
+default = []
+tls = ["tonic/tls-ring"]
+
+[dependencies]
+futures = { workspace = true }
+thiserror = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+tokio = { workspace = true, features = ["net", "signal", "sync", "time"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+foxtive = { workspace = true }
+tracing = { workspace = true }
+tower = { workspace = true }
+http-body = { workspace = true }
+
+[lints.rust]
+missing_docs = "warn"

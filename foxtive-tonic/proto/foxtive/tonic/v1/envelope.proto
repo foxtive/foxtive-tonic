@@ -1,0 +1,46 @@
+// Reference contract. This crate ships no build script and never compiles this
+// file; the matching Rust type is hand-written in `src/grpc/envelope.rs` and is
+// kept wire-compatible with it.
+//
+// If you change a tag, a type, or add/remove a field here, change
+// `src/grpc/envelope.rs` in the same commit; the wire test
+// `typed_envelope_round_trips_over_the_wire` in `foxtive-tonic-examples/tests/`
+// decodes the response against these numbers.
+//
+// `data` is a `google.protobuf.Value` so a JSON payload stays readable in
+// `grpcurl`'s default output. Limitation: `Value` numbers are IEEE-754 doubles,
+// so integers above 2^53 lose precision; use a typed message or a string.
+
+syntax = "proto3";
+
+package foxtive.tonic.v1;
+
+import "google/protobuf/struct.proto";
+
+// The standard Foxtive response envelope, mirroring the JSON object emitted by
+// `foxtive_tonic::grpc::responder::Responder`.
+message Envelope {
+  // Application response code, three digits: "000" Ok, "001" Created,
+  // "002" Accepted, "003" BadRequest, "004" Unauthenticated,
+  // "005" PermissionDenied, "006" NotFound, "007" AlreadyExists,
+  // "008" ResourceExhausted, "009" Internal, "010" Unimplemented,
+  // "011" Unavailable, "012" DeadlineExceeded, "013" FailedPrecondition,
+  // "014" Cancelled, "015" Aborted, "016" OutOfRange, "017" DataLoss,
+  // "018" Unknown. See `foxtive_tonic::enums::response_code::ResponseCode`.
+  string code = 1;
+
+  // Whether the call succeeded. Mirrors `ResponseCodeContract::success`, and is
+  // true for every code whose gRPC status is `Ok`.
+  bool success = 2;
+
+  // Unix time in seconds at which the response was produced.
+  uint64 timestamp = 3;
+
+  // Optional human-readable message. `optional` so that "no message" and "an
+  // empty message" stay distinguishable.
+  optional string message = 4;
+
+  // The response payload. Absent for a message-only envelope, which is not the
+  // same as a payload that is JSON null.
+  google.protobuf.Value data = 5;
+}

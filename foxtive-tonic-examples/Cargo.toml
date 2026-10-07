@@ -1,0 +1,86 @@
+[package]
+name = "foxtive-tonic-examples"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Examples and integration tests for the foxtive-tonic crate (not published; owns the proto build script)"
+
+[features]
+default = ["reflection", "tls"]
+# Gates the reflection block in `examples/helloworld.rs` and nothing else: this crate
+# is never published, so `tonic-reflection` lives in `[dev-dependencies]`, where the
+# examples and tests that use it can reach it unconditionally.
+reflection = []
+# Forwards to the library, which enables tonic/tls-ring.
+tls = ["foxtive-tonic/tls"]
+
+[dependencies]
+foxtive-tonic = { path = "../foxtive-tonic" }
+foxtive = { workspace = true }
+tonic = { workspace = true }
+prost = { workspace = true }
+# The generated code names `::prost_types` directly, and so does `Envelope::data`.
+prost-types = { workspace = true }
+tokio = { workspace = true, features = ["time", "sync"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tower = { workspace = true }
+# Referenced by the code generated from the protos in `proto/`.
+tonic-prost = "0.14"
+
+[dev-dependencies]
+# Examples and tests are dev targets, so everything they import lives here: the
+# reflection service `helloworld.rs` serves, the generated health clients, and
+# `futures` for the stream helpers.
+tonic-reflection = { version = "0.14", features = ["server"] }
+tonic-health = { workspace = true }
+futures = { workspace = true }
+
+[build-dependencies]
+tonic-prost-build = "0.14"
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+required-features = []
+
+[[example]]
+name = "helloworld"
+path = "examples/helloworld.rs"
+required-features = ["reflection"]
+
+[[example]]
+name = "tls_server"
+path = "examples/tls_server.rs"
+required-features = ["tls"]
+
+[[example]]
+name = "custom_interceptor"
+path = "examples/custom_interceptor.rs"
+required-features = []
+
+[[example]]
+name = "graceful_shutdown"
+path = "examples/graceful_shutdown.rs"
+required-features = []
+
+[[example]]
+name = "high_traffic"
+path = "examples/high_traffic.rs"
+required-features = []
+
+[[example]]
+name = "error_handling"
+path = "examples/error_handling.rs"
+required-features = []
+
+[[example]]
+name = "request_id"
+path = "examples/request_id.rs"
+required-features = []
+
+[[example]]
+name = "typed_envelope"
+path = "examples/typed_envelope.rs"
+required-features = []

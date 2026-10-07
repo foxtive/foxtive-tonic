@@ -1,0 +1,68 @@
+// Shared by the `typed_envelope` example and the integration tests in `tests/`.
+//
+// It imports `foxtive/tonic/v1/envelope.proto` from the library, and `build.rs`
+// maps `.foxtive.tonic.v1.Envelope` to the hand-written
+// `::foxtive_tonic::grpc::envelope::Envelope` with `extern_path`. That makes the
+// reference contract part of this crate's compilation: if the shipped `.proto` and
+// the struct stop agreeing, the generated code stops compiling.
+
+syntax = "proto3";
+
+package foxtive.tonic.examples.v1;
+
+import "foxtive/tonic/v1/envelope.proto";
+
+// Everything the integration tests need from one service, so a test file does
+// not have to invent a proto per scenario.
+service Demo {
+  // Answers "pong", or reports NotFound when `fail` is set.
+  rpc Ping (PingRequest) returns (PingReply);
+
+  // Sleeps for `millis` before answering, so a caller can hold a request in
+  // flight across a shutdown or a cancellation.
+  rpc Sleep (SleepRequest) returns (PingReply);
+
+  // Typed envelope carrying back the JSON document it was given.
+  rpc Echo (EchoRequest) returns (foxtive.tonic.v1.Envelope);
+
+  // Typed envelope with a message and no payload.
+  rpc Ack (AckRequest) returns (foxtive.tonic.v1.Envelope);
+
+  // Always fails with a `foxtive` AppMessage, so the error envelope lands in
+  // `Status::details`.
+  rpc AppFailure (AppFailureRequest) returns (foxtive.tonic.v1.Envelope);
+}
+
+message PingRequest {
+  // Report NotFound instead of answering.
+  bool fail = 1;
+}
+
+message PingReply {
+  string message = 1;
+}
+
+message SleepRequest {
+  // How long to wait before answering.
+  uint64 millis = 1;
+}
+
+message EchoRequest {
+  // A JSON document, sent as text and re-encoded by the server as a
+  // `google.protobuf.Value`.
+  string payload = 1;
+
+  // The application response code to report, e.g. "001" for Created. An unknown
+  // code is reported as "009" Internal by the handler.
+  string code = 2;
+}
+
+message AckRequest {
+  // The human-readable message to put in the envelope.
+  string message = 1;
+}
+
+message AppFailureRequest {
+  // The entity name to report as missing.
+  string entity = 1;
+}
